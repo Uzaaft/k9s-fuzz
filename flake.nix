@@ -44,6 +44,56 @@
         }
       );
 
+      apps = forAllSystems (
+        { pkgs, bombadil }:
+        let
+          fuzz = pkgs.writeShellApplication {
+            name = "fuzz";
+            runtimeInputs = [
+              bombadil.default
+              pkgs.k9s
+              pkgs.kind
+              pkgs.git
+            ];
+            text = ''
+              root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+              state="$root/.state"
+
+              # Keep k9s and kube state local to the repo so fuzzing can't
+              # touch your real config or clusters.
+              export KUBECONFIG="$state/kubeconfig"
+              export K9S_CONFIG_DIR="$state/k9s"
+              export XDG_STATE_HOME="$state/xdg"
+              mkdir -p "$K9S_CONFIG_DIR" "$XDG_STATE_HOME"
+
+              if ! kind get clusters 2>/dev/null | grep -qx fuzz; then
+                kind create cluster --name fuzz
+              fi
+
+              run="$state/runs/$(date +%Y%m%d-%H%M%S)"
+              mkdir -p "$run"
+              echo "fuzz: writing trace and k9s.log to $run" >&2
+
+              exec bombadil terminal fuzz \
+                --specification "$root/spec.ts" \
+                --output-path "$run" \
+                "$@" \
+                -- k9s --readonly --logFile "$run/k9s.log"
+            '';
+          };
+        in
+        {
+          default = {
+            type = "app";
+            program = "${bombadil.default}/bin/bombadil";
+          };
+          fuzz = {
+            type = "app";
+            program = "${fuzz}/bin/fuzz";
+          };
+        }
+      );
+
       devShells = forAllSystems (
         { pkgs, bombadil }:
         {
