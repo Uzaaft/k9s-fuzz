@@ -50,13 +50,11 @@
           fuzz = pkgs.writeShellApplication {
             name = "fuzz";
             runtimeInputs = [
-              bombadil.default
-              pkgs.k9s
-              pkgs.kind
-              pkgs.git
+              pkgs.coreutils
+              pkgs.gnugrep
             ];
             text = ''
-              root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+              root="$(${pkgs.git}/bin/git rev-parse --show-toplevel 2>/dev/null || pwd)"
               state="$root/.state"
 
               # Keep k9s and kube state local to the repo so fuzzing can't
@@ -66,19 +64,19 @@
               export XDG_STATE_HOME="$state/xdg"
               mkdir -p "$K9S_CONFIG_DIR" "$XDG_STATE_HOME"
 
-              if ! kind get clusters 2>/dev/null | grep -qx fuzz; then
-                kind create cluster --name fuzz
+              if ! ${pkgs.kind}/bin/kind get clusters 2>/dev/null | grep -qx fuzz; then
+                ${pkgs.kind}/bin/kind create cluster --name fuzz
               fi
 
               run="$state/runs/$(date +%Y%m%d-%H%M%S)"
               mkdir -p "$run"
-              echo "fuzz: writing trace and k9s.log to $run" >&2
+              echo "fuzz: writing traces and k9s.log to $run" >&2
 
-              exec bombadil terminal fuzz \
+              exec ${bombadil.default}/bin/bombadil terminal fuzz \
                 --specification "$root/spec.ts" \
                 --output-path "$run" \
                 "$@" \
-                -- k9s --readonly --logFile "$run/k9s.log"
+                -- ${pkgs.k9s}/bin/k9s --readonly --logFile "$run/k9s.log"
             '';
           };
         in
